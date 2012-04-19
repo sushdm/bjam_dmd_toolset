@@ -1,0 +1,107 @@
+#-------------------------------------------------------------------------------
+#
+#  Copyright (c) 2012 Dmitry Sushko
+#
+#  Author: Dmitry Sushko <dmitry.sushko@gmail.com>
+#
+#-------------------------------------------------------------------------------
+
+import common ;
+import feature ;
+import generators ;
+import os ;
+import type ;
+import toolset ;
+
+feature.extend toolset : dmd ;
+
+rule init ( version ? : command * : options * )
+{
+    local condition = [ common.check-init-parameters dmd
+        : version $(version) ] ;
+
+    local command = ;
+
+    if [ os.name ] = NT
+    {
+        command = [ common.get-invocation-command dmd : dmd.exe
+            : $(command) ] ;
+    }
+    else
+    {
+        command = [ common.get-invocation-command dmd : dmd
+            : $(command) ] ;
+    }
+
+    common.handle-options dmd : $(condition) : $(command) : $(options) ;
+}
+
+# register new source file type '.d'
+type.register D : d ;
+
+# register generation of object files from D source files
+generators.register-standard dmd.compile : D : OBJ ;
+
+feature.feature dflags : : free ;
+
+toolset.flags dmd.compile OPTIONS <dflags> ;
+
+toolset.flags dmd.compile OPTIONS <variant>debug   : -debug ;
+toolset.flags dmd.compile OPTIONS <variant>release : -release ;
+
+toolset.flags dmd.compile OPTIONS <optimization>off    : ;
+toolset.flags dmd.compile OPTIONS <optimization>speed  : -O ;
+
+toolset.flags dmd.compile OPTIONS <warnings>off : ;
+toolset.flags dmd.compile OPTIONS <warnings>on  : -w ;
+toolset.flags dmd.compile OPTIONS <warnings>all : -w -wi ;
+
+toolset.flags dmd.compile OPTIONS <debug-symbols>off : ;
+toolset.flags dmd.compile OPTIONS <debug-symbols>on  : -g ;
+
+# rule dmd.complile ( targets * : sources * : properties * )
+# {
+#     DEPENDS $(<) : $(>) ;
+# }
+
+actions dmd.compile
+{
+    "$(CONFIG_COMMAND)" -c $(OPTIONS) "$(>)" -of"$(<)"
+}
+
+# register generation of executable files from LIB and OBJ
+generators.register-linker dmd.link : LIB OBJ : EXE : <toolset>dmd ;
+
+toolset.flags dmd.link LIBRARIES <library-file> ;
+
+# rule dmd.link ( targets * : sources * : properties * )
+# {
+# }
+
+actions together dmd.link bind LIBRARIES
+{
+    "$(CONFIG_COMMAND)" -of"$(<)" "$(>)" $(LIBRARIES)
+}
+
+
+
+# register generation of LIB from OBJ
+generators.register-linker dmd.link.lib : OBJ : LIB : <toolset>dmd ;
+generators.override dmd.link.lib : builtin.lib-generator ;
+
+if [ os.on-unix ]
+{
+    toolset.flags dmd.link.lib LIBLINKFLAGS <link>shared : -shared -fPIC ;
+}
+toolset.flags dmd.link.lib LIBLINKFLAGS <link>static : -lib ;
+
+toolset.flags dmd.link.lib LIBRARIES <library-file> ;
+
+# rule dmd.link.lib ( targets * : sources * : properties * )
+# {
+# }
+
+actions together link.lib bind LIBLINKFLAGS
+{
+    "$(CONFIG_COMMAND)" $(LIBLINKFLAGS) $(LIBRARIES) "$(>)" -of"$(<)"
+}
